@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Pit Planner works</title>
+<meta name="description" content="A walk through Pit Planner: set up your smoker, build the menu, pick when to eat, and let the app ring you at every step of the cook.">
+<link rel="icon" href="../icon.png">
+<link rel="stylesheet" href="../style.css">
+<style>
+  main.wide { max-width: 980px; }
+  .lead { color: var(--muted); font-size: 1.1rem; max-width: 620px; margin: 0 auto; }
+
+  /* Stage chips */
+  .stages { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 28px 0 8px; padding: 0; list-style: none; }
+  .stages li { margin: 0; }
+  .stages a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: var(--card); color: var(--text); text-decoration: none; font-weight: 500; border: 1px solid #2c2c2c; }
+  .stages a:hover { border-color: var(--accent); }
+  .stages b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #111; font-size: 0.8rem; }
+
+  /* Sample day */
+  .day { background: var(--card); border-radius: 16px; padding: 22px 22px 18px; margin-top: 36px; }
+  .day h2 { margin: 0 0 4px; }
+  .day p { margin: 0 0 18px; color: var(--muted); }
+  .lanes { position: relative; }
+  .lane { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 12px; margin: 10px 0; }
+  .lane .name { font-weight: 500; line-height: 1.2; }
+  .lane .name small { display: block; color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+  .track { position: relative; height: 30px; background: #151515; border-radius: 8px; }
+  .bar { position: absolute; top: 0; bottom: 0; border-radius: 8px; background: var(--accent); color: #111; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; padding: 0 8px; white-space: nowrap; overflow: hidden; }
+  .bar.rest { background: #6b3a1c; color: var(--text); }
+  .bar.fire { background: #3a3a3a; color: var(--text); }
+  .axis { display: grid; grid-template-columns: 112px 1fr; gap: 12px; margin-top: 4px; }
+  .ticks { position: relative; height: 22px; color: var(--muted); font-size: 0.75rem; }
+  .ticks span { position: absolute; transform: translateX(-50%); }
+  .key { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; color: var(--muted); font-size: 0.85rem; }
+  .key i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .steps-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 18px; padding: 0; list-style: none; }
+  .steps-strip li { background: #151515; border-radius: 10px; padding: 10px 12px; margin: 0; font-size: 0.9rem; line-height: 1.35; }
+  .steps-strip time { display: block; color: var(--accent); font-weight: 600; }
+
+  /* Stage sections */
+  .stage { margin-top: 64px; scroll-margin-top: 16px; }
+  .stage > h2 { font-size: 1.6rem; display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .stage > h2 b { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #111; font-size: 1rem; flex: none; }
+  .stage > .intro { color: var(--muted); margin-top: 0; }
+
+  .step { display: grid; grid-template-columns: 240px 1fr; gap: 32px; align-items: center; margin: 36px 0; }
+  .step:nth-of-type(even) { grid-template-columns: 1fr 240px; }
+  .step:nth-of-type(even) .shots { order: 2; }
+  .step h3 { margin: 0 0 6px; font-size: 1.2rem; }
+  .step p { margin: 0 0 10px; }
+  .step ul { margin: 0; }
+  .shots { display: flex; gap: 12px; justify-content: center; }
+  .phone { margin: 0; background: #000; border: 1px solid #2e2e2e; border-radius: 22px; padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); max-width: 240px; }
+  .phone img { display: block; width: 100%; height: auto; border-radius: 16px; }
+  .shots.two .phone { max-width: 190px; }
+  .step.has-two { grid-template-columns: 392px 1fr; }
+  .step.has-two:nth-of-type(even) { grid-template-columns: 1fr 392px; }
+  .tip { background: var(--card); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 14px; font-size: 0.95rem; color: var(--text); }
+
+  .cta { text-align: center; margin-top: 72px; }
+
+  @media (max-width: 760px) {
+    .step, .step:nth-of-type(even), .step.has-two, .step.has-two:nth-of-type(even) { grid-template-columns: 1fr; gap: 18px; }
+    .step:nth-of-type(even) .shots { order: 0; }
+    .phone { max-width: 230px; }
+    .shots.two .phone { max-width: 46%; }
+    .lane, .axis { grid-template-columns: 76px 1fr; gap: 8px; }
+    .lane .name { font-size: 0.85rem; }
+    .bar { font-size: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<main class="wide">
+  <p><a href="../">&larr; Pit Planner</a></p>
+
+  <header class="hero">
+    <h1>How Pit Planner works</h1>
+    <p class="lead">Tell it what you're cooking and when you want to eat. It works backward from dinner, tells you when to light the smoker and when each food goes on, then rings you at every step.</p>
+    <ul class="stages">
+      <li><a href="#setup"><b>1</b>Set up</a></li>
+      <li><a href="#plan"><b>2</b>Plan</a></li>
+      <li><a href="#cook"><b>3</b>Cook</a></li>
+      <li><a href="#learn"><b>4</b>Learn and share</a></li>
+    </ul>
+  </header>
+
+  <!-- Sample day: built from the plan shown in the screenshots below -->
+  <section class="day" aria-labelledby="day-h">
+    <h2 id="day-h">One Saturday, planned backward</h2>
+    <p>Dinner at 5:00 PM: a 12 lb brisket, 2 lb of wings and 4 chicken breasts. You pick the serve time. Pit Planner works out the rest.</p>
+
+    <div class="lanes" role="img" aria-label="Timeline from 6 AM to 5 PM. Fire the smoker at 6:20 AM. Brisket on at 6:40 AM, off at 3:40 PM, rests an hour. Wings on at 3:15 PM. Chicken breasts on the griddle at 4:40 PM. Everything is ready at 5:00 PM.">
+      <!-- Scale: 6:00 AM = 0%, 5:00 PM = 100% (660 minutes) -->
+      <div class="lane">
+        <div class="name">Smoker<small>Pit Boss 850</small></div>
+        <div class="track"><div class="bar fire" style="left:3.03%;width:96.97%">Fire 6:20 AM, hold at 225F</div></div>
+      </div>
+      <div class="lane">
+        <div class="name">Brisket<small>12 lb, smoker</small></div>
+        <div class="track">
+          <div class="bar" style="left:6.06%;width:81.82%">On 6:40 AM, about 9 hr, wrap at the stall</div>
+          <div class="bar rest" style="left:87.88%;width:9.09%">Rest</div>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="name">Wings<small>2 lb, smoker</small></div>
+        <div class="track"><div class="bar" style="left:84.09%;width:15.15%">3:15 PM</div></div>
+      </div>
+      <div class="lane">
+        <div class="name">Breasts<small>4, griddle</small></div>
+        <div class="track"><div class="bar" style="left:96.97%;width:1.82%"></div></div>
+      </div>
+      <div class="axis">
+        <div></div>
+        <div class="ticks">
+          <span style="left:0%">6a</span>
+          <span style="left:27.27%">9a</span>
+          <span style="left:54.55%">12p</span>
+          <span style="left:81.82%">3p</span>
+          <span style="left:100%;transform:translateX(-100%)">5p</span>
+        </div>
+      </div>
+    </div>
+    <div class="key">
+      <span><i style="background:var(--accent)"></i>On heat</span>
+      <span><i style="background:#6b3a1c"></i>Resting</span>
+      <span><i style="background:#3a3a3a"></i>Smoker lit</span>
+    </div>
+
+    <ul class="steps-strip">
+      <li><time>6:20 AM</time>Fire the smoker to 225F</li>
+      <li><time>6:40 AM</time>Brisket on</li>
+      <li><time>Late morning</time>Check the brisket, wrap once the bark is set</li>
+      <li><time>3:15 PM</time>Wings on</li>
+      <li><time>3:40 PM</time>Brisket off, rest 60 min</li>
+      <li><time>4:40 PM</time>Chicken breasts on the griddle</li>
+      <li><time>5:00 PM</time>Serve</li>
+    </ul>
+  </section>
+
+  <!-- 1. Set up -->
+  <section class="stage" id="setup">
+    <h2><b>1</b>Set up, once</h2>
+    <p class="intro">Three short screens the first time you open the app. You can change all of it later in Gear.</p>
+
+    <div class="step has-two">
+      <div class="shots two">
+        <figure class="phone"><img src="img/setup-welcome.webp" width="540" height="1124" loading="lazy" alt="Setup: pick Fahrenheit or Celsius, pounds or kilograms"></figure>
+        <figure class="phone"><img src="img/setup-cookers.webp" width="540" height="1124" loading="lazy" alt="Setup: a pellet smoker picked, plus a griddle and an oven for holding"></figure>
+      </div>
+      <div>
+        <h3>Pick your units and your gear</h3>
+        <p>Choose F or C, pounds or kilograms. Then tell it what you cook on: your smoker, a griddle, an oven for holding food warm.</p>
+        <p>Search the smoker list by brand or model. When it knows your smoker, it fills in the hopper size and grate area for you. Not listed? Enter it yourself.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/setup-alerts.webp" width="540" height="1124" loading="lazy" alt="Setup: make sure alerts get through, with the permission rows and a test alert button"></figure></div>
+      <div>
+        <h3>Make sure alerts get through</h3>
+        <p>A 6 AM "wrap the brisket" alert has to ring with the phone asleep. Allow notifications, exact alarms and no battery limits, then send yourself a test alert and lock the phone.</p>
+        <p class="tip">Every step rings as a real alarm, like your alarm clock, not a quiet notification you might miss.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Plan -->
+  <section class="stage" id="plan">
+    <h2><b>2</b>Build the plan</h2>
+    <p class="intro">Add what you're cooking, pick when you want to eat, and the times fill in.</p>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/plan-main.webp" width="540" height="1124" loading="lazy" alt="Plan with brisket, chicken wings and chicken breasts, fire time 6:20 AM, pellets about 17 lb, no conflicts"></figure></div>
+      <div>
+        <h3>Pick a serve time</h3>
+        <p>Choose <strong>Ready by</strong> and give the time you want to eat, or <strong>Start at</strong> and give the time you want to light the smoker. The other one is worked out for you.</p>
+        <p>Each food on the menu shows when it goes on and how long it's on heat. Tiles at the bottom show when to fire the smoker, how many pellets the cook needs and whether anything conflicts.</p>
+      </div>
+    </div>
+
+    <div class="step has-two">
+      <div class="shots two">
+        <figure class="phone"><img src="img/plan-add-food.webp" width="540" height="1124" loading="lazy" alt="Add food: search and food groups"></figure>
+        <figure class="phone"><img src="img/plan-food-details.webp" width="540" height="1124" loading="lazy" alt="Brisket details: weight, cooker, wrap, rest time and timing, with fire, off heat and serve times"></figure>
+      </div>
+      <div>
+        <h3>Add food</h3>
+        <p>Search or browse beef, pork, chicken and more. Set the weight or count, the cooker, how you wrap and how long it rests.</p>
+        <p>The bar at the bottom shows Fire, Off heat and Serve, and updates as you change things. Timing starts from hours per pound and you can set your own rate or total hours.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/plan-temp-menu.webp" width="540" height="1124" loading="lazy" alt="Smoker temp menu, each temperature with its fire time"></figure></div>
+      <div>
+        <h3>Try a different smoker temp</h3>
+        <p>Open Smoker temp to see the fire time you'd get at each setting your smoker can do. Run hotter if you'd rather sleep in.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/plan-conflicts.webp" width="540" height="1124" loading="lazy" alt="Conflicts sheet: two foods need the smoker at different temps, with fix buttons"></figure></div>
+      <div>
+        <h3>Fix conflicts in one tap</h3>
+        <p>If two foods need the smoker at different temps at the same time, or the cook needs more pellets than your hopper holds, the plan tells you in plain words.</p>
+        <p>Most problems come with a fix: move a food to the griddle, change the smoker temp, or edit the food. You can still start a plan with a warning. It's your call.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Cook -->
+  <section class="stage" id="cook">
+    <h2><b>3</b>Cook</h2>
+    <p class="intro">Tap Start cook. From here the app keeps time so you don't have to.</p>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/cook-live.webp" width="540" height="1124" loading="lazy" alt="Live cook: Next up card says check the brisket in 1 hr 13 min, with Done and Adjust, and a chart with a lane for each food"></figure></div>
+      <div>
+        <h3>See what's next</h3>
+        <p>The big card shows the next step and how long until it's due. A chip says whether you're on plan, behind or ahead. Below, one lane per food shows the whole day.</p>
+        <p>Tap <strong>Done</strong> when you've done a step. If you're early or late, choose to keep the serve time (the food holds longer or shorter) or move it.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/lock-screen-alert.webp" width="540" height="496" loading="lazy" alt="Step alerts on a locked phone with Done and +15 min buttons"></figure></div>
+      <div>
+        <h3>Answer from the lock screen</h3>
+        <p>Each step rings, even with the phone locked. Tap <strong>Done</strong> or <strong>+15 min</strong> right on the alert without opening the app. Miss it and it rings again every 10 minutes.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/cook-options.webp" width="540" height="1124" loading="lazy" alt="Cook options: running behind or ahead, check again in 30 min, quiet alerts, pit went out, start over, end cook"></figure></div>
+      <div>
+        <h3>When the cook doesn't follow the plan</h3>
+        <ul>
+          <li><strong>Running behind or ahead:</strong> shift every step after now.</li>
+          <li><strong>Not yet:</strong> check again in 30 minutes.</li>
+          <li><strong>Quiet alerts</strong> for 30 minutes while you're busy.</li>
+          <li><strong>Pit went out:</strong> stop the clock until you're back up to temp.</li>
+        </ul>
+        <p>The plan re-works itself each time and tells you what happens to serve.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Learn and share -->
+  <section class="stage" id="learn">
+    <h2><b>4</b>Learn and share</h2>
+    <p class="intro">Every cook you save makes the next plan closer to how your smoker really runs.</p>
+
+    <div class="step has-two">
+      <div class="shots two">
+        <figure class="phone"><img src="img/cook-finished-rate.webp" width="540" height="1124" loading="lazy" alt="Cook finished: planned and actual times for each food, and a card offering a new brisket rate"></figure>
+        <figure class="phone"><img src="img/history-main.webp" width="540" height="1124" loading="lazy" alt="Cook history: the brisket rate and a saved cook"></figure>
+      </div>
+      <div>
+        <h3>It learns your smoker</h3>
+        <p>When the cook is done you see planned against actual time for each food. If the brisket finished early, the app offers a new rate for next time. Keep it or don't.</p>
+        <p>Saved cooks live in Cook history with your notes. Tap Cook again to put the same menu back on the plan with a new serve time.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="shots"><figure class="phone"><img src="img/shared-plan.webp" width="540" height="1124" loading="lazy" alt="Open shared plan: the sender's menu, a serve day, your smoker and Use this plan"></figure></div>
+      <div>
+        <h3>Share a plan</h3>
+        <p>Send your menu to someone cooking with you by text, email or any app. When they open it, the times are worked out for their gear and their cook rates, not yours.</p>
+        <p>The file holds the menu, serve time and smoker temp. Nothing personal.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <h2>Try it</h2>
+    <p class="lead">Free, Android only, US only for now. No account, no ads, no tracking.</p>
+    <div class="buttons">
+      <a class="btn primary" href="https://play.google.com/apps/testing/io.github.mecheng70.pitplanner">Join the test on Google Play</a>
+      <a class="btn" href="https://buymeacoffee.com/PitPlanner">Buy me a bag of pellets</a>
+    </div>
+  </section>
+</main>
+<footer>
+  <a href="../">Home</a> · <a href="../privacy/">Privacy policy</a> · <a href="https://github.com/MechEng70/pitplanner">Source on GitHub</a> · © 2026 MechEng70
+</footer>
+</body>
+</html>
